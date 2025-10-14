@@ -288,139 +288,18 @@ def get_diagnostics(
         is_saved,
     )
 
-    live_mode = settings.get("live_mode", True)
-    dmypy = settings.get("dmypy", False)
+    dmypy_command = ["dmypy", "--status-file", ".pylsp-dmypy", "run"]
+    args = ["--show-error-end", "--no-error-summary", "--no-pretty", "src"]
 
-    if dmypy and live_mode:
-        # dmypy can only be efficiently run on files that have been saved, see:
-        # https://github.com/python/mypy/issues/9309
-        log.warning("live_mode is not supported with dmypy, disabling")
-        live_mode = False
-
-    if dmypy:
-        dmypy_status_file = settings.get("dmypy_status_file", ".dmypy.json")
-
-    args = ["--show-error-end", "--no-error-summary", "--no-pretty"]
-
-    global tmpFile
-    if live_mode and not is_saved:
-        if tmpFile:
-            tmpFile = open(tmpFile.name, "wb")
-        else:
-            tmpFile = tempfile.NamedTemporaryFile("wb", delete=False)
-        log.info("live_mode tmpFile = %s", tmpFile.name)
-        tmpFile.write(bytes(document.source, "utf-8"))
-        tmpFile.close()
-        args.extend(["--shadow-file", document.path, tmpFile.name])
-    elif not is_saved and document.path in last_diagnostics:
-        # On-launch the document isn't marked as saved, so fall through and run
-        # the diagnostics anyway even if the file contents may be out of date.
-        log.info(
-            "non-live, returning cached diagnostics len(cached) = %s",
-            last_diagnostics[document.path],
-        )
-        return last_diagnostics[document.path]
-
-    mypyConfigFile = mypyConfigFileMap.get(workspace.root_path)
-    if mypyConfigFile:
-        args.append("--config-file")
-        args.append(mypyConfigFile)
-
-    args.append(document.path)
-
-    if settings.get("strict", False):
-        args.append("--strict")
-
-    overrides = settings.get("overrides", [True])
-    exit_status = 0
-
-    if not dmypy:
-        args.extend(["--incremental", "--follow-imports", settings.get("follow-imports", "silent")])
-        args = apply_overrides(args, overrides)
-
-        mypy_command: list[str] = get_cmd(settings, "mypy")
-
-        if mypy_command:
-            # mypy exists on PATH or was provided by settings
-            # -> use this mypy
-            log.info("executing mypy args = %s on path", args)
-            completed_process = subprocess.run(
-                [*mypy_command, *args], capture_output=True, **windows_flag, encoding="utf-8"
-            )
-            report = completed_process.stdout
-            errors = completed_process.stderr
-            exit_status = completed_process.returncode
-        else:
-            # mypy does not exist on PATH and was not provided by settings,
-            # but must exist in the env pylsp-mypy is installed in
-            # -> use mypy via api
-            log.info("executing mypy args = %s via api", args)
-            report, errors, exit_status = mypy_api.run(args)
-    else:
-        # If dmypy daemon is non-responsive calls to run will block.
-        # Check daemon status, if non-zero daemon is dead or hung.
-        # If daemon is hung, kill will reset
-        # If daemon is dead/absent, kill will no-op.
-        # In either case, reset to fresh state
-
-        dmypy_command: list[str] = get_cmd(settings, "dmypy")
-
-        if dmypy_command:
-            # dmypy exists on PATH or was provided by settings
-            # -> use this dmypy
-            completed_process = subprocess.run(
-                [*dmypy_command, "--status-file", dmypy_status_file, "status"],
-                capture_output=True,
-                **windows_flag,
-                encoding="utf-8",
-            )
-            errors = completed_process.stderr
-            exit_status = completed_process.returncode
-            if exit_status != 0:
-                log.info(
-                    "restarting dmypy from status: %s message: %s via path",
-                    exit_status,
-                    errors.strip(),
-                )
-                subprocess.run(
-                    ["dmypy", "--status-file", dmypy_status_file, "restart"],
-                    capture_output=True,
-                    **windows_flag,
-                    encoding="utf-8",
-                )
-        else:
-            # dmypy does not exist on PATH and was not provided by settings,
-            # but must exist in the env pylsp-mypy is installed in
-            # -> use dmypy via api
-            _, errors, exit_status = mypy_api.run_dmypy(
-                ["--status-file", dmypy_status_file, "status"]
-            )
-            if exit_status != 0:
-                log.info(
-                    "restarting dmypy from status: %s message: %s via api",
-                    exit_status,
-                    errors.strip(),
-                )
-                mypy_api.run_dmypy(["--status-file", dmypy_status_file, "restart"])
-
-        # run to use existing daemon or restart if required
-        args = ["--status-file", dmypy_status_file, "run", "--"] + apply_overrides(args, overrides)
-        if dmypy_command:
-            # dmypy exists on PATH or was provided by settings
-            # -> use this dmypy
-            log.info("dmypy run args = %s via path", args)
-            completed_process = subprocess.run(
-                [*dmypy_command, *args], capture_output=True, **windows_flag, encoding="utf-8"
-            )
-            report = completed_process.stdout
-            errors = completed_process.stderr
-            exit_status = completed_process.returncode
-        else:
-            # dmypy does not exist on PATH and was not provided by settings,
-            # but must exist in the env pylsp-mypy is installed in
-            # -> use dmypy via api
-            log.info("dmypy run args = %s via api", args)
-            report, errors, exit_status = mypy_api.run_dmypy(args)
+    log.info("dmypy run args = %s via path", args)
+    completed_process = subprocess.run(
+        [*dmypy_command, "--", *args],
+        capture_output=True,
+        encoding="utf-8",
+    )
+    report = completed_process.stdout
+    errors = completed_process.stderr
+    exit_status = completed_process.returncode
 
     log.debug("report:\n%s", report)
     log.debug("errors:\n%s", errors)
