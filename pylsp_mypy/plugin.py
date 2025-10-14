@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 File that contains the python-lsp-server plugin pylsp-mypy.
 
@@ -6,6 +5,7 @@ Created on Fri Jul 10 09:53:57 2020
 
 @author: Richard Kellnberger
 """
+
 import ast
 import collections
 import logging
@@ -14,43 +14,36 @@ import os.path
 import re
 import shutil
 import subprocess
-import tempfile
 from configparser import ConfigParser
 from pathlib import Path
-from typing import IO, Any, Optional, TypedDict
+from typing import IO, Any, TypedDict
 
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
+import tomllib
 
 from mypy import api as mypy_api
 from pylsp import hookimpl
 from pylsp.config.config import Config
 from pylsp.workspace import Document, Workspace
 
+
 line_pattern = re.compile(
-    (
-        r"^(?P<file>.+):(?P<start_line>\d+):(?P<start_col>\d*):(?P<end_line>\d*):(?P<end_col>\d*): "
-        r"(?P<severity>\w+): (?P<message>.+?)(?: +\[(?P<code>.+)\])?$"
-    )
+    r"^(?P<file>.+):(?P<start_line>\d+):(?P<start_col>\d*):(?P<end_line>\d*):(?P<end_col>\d*): "
+    r"(?P<severity>\w+): (?P<message>.+?)(?: +\[(?P<code>.+)\])?$"
 )
 
 whole_line_pattern = re.compile(  # certain mypy warnings do not report start-end ranges
-    (
-        r"^(?P<file>.+):(?P<start_line>\d+): "
-        r"(?P<severity>\w+): (?P<message>.+?)(?: +\[(?P<code>.+)\])?$"
-    )
+    r"^(?P<file>.+):(?P<start_line>\d+): "
+    r"(?P<severity>\w+): (?P<message>.+?)(?: +\[(?P<code>.+)\])?$"
 )
 
 log = logging.getLogger(__name__)
 
 # A mapping from workspace path to config file path
-mypyConfigFileMap: dict[str, Optional[str]] = {}
+mypyConfigFileMap: dict[str, str | None] = {}
 
 settingsCache: dict[str, dict[str, Any]] = {}
 
-tmpFile: Optional[IO[bytes]] = None
+tmpFile: IO[bytes] | None = None
 
 # In non-live-mode the file contents aren't updated.
 # Returning an empty diagnostic clears the diagnostic result,
@@ -75,7 +68,7 @@ windows_flag: WindowsFlag = (
 )
 
 
-def parse_line(line: str, document: Optional[Document] = None) -> Optional[dict[str, Any]]:
+def parse_line(line: str, document: Document | None = None) -> dict[str, Any] | None:
     """
     Return a language-server diagnostic from a line of the Mypy error report.
 
@@ -167,7 +160,7 @@ def match_exclude_patterns(document_path: str, exclude_patterns: list[str]) -> b
     for pattern in exclude_patterns:
         try:
             if re.search(pattern, document_path):
-                log.debug(f"{document_path} matches " f"exclude pattern '{pattern}'")
+                log.debug(f"{document_path} matches exclude pattern '{pattern}'")
                 return True
         except re.error as e:
             log.error(f"pattern {pattern} is not a valid regular expression: {e}")
@@ -244,9 +237,12 @@ def pylsp_lint(
     # exclude = ["tests/*"]
     exclude_patterns = settings.get("exclude", [])
 
-    if match_exclude_patterns(document_path=document.path, exclude_patterns=exclude_patterns):
+    if match_exclude_patterns(
+        document_path=document.path, exclude_patterns=exclude_patterns
+    ):
         log.debug(
-            f"Not running because {document.path} matches " f"exclude patterns '{exclude_patterns}'"
+            f"Not running because {document.path} matches "
+            f"exclude patterns '{exclude_patterns}'"
         )
         return []
 
@@ -317,7 +313,9 @@ def get_diagnostics(
                     "end": {"line": 0, "character": 1000},
                 },
                 "message": errors,
-                "severity": 1 if exit_status != 0 else 2,  # Error if exited with error or warning.
+                "severity": 1
+                if exit_status != 0
+                else 2,  # Error if exited with error or warning.
             }
         )
 
@@ -372,19 +370,25 @@ def init(workspace: str) -> dict[str, str]:
 
     configuration = {}
     path = findConfigFile(
-        workspace, [], ["pylsp-mypy.cfg", "mypy-ls.cfg", "mypy_ls.cfg", "pyproject.toml"], False
+        workspace,
+        [],
+        ["pylsp-mypy.cfg", "mypy-ls.cfg", "mypy_ls.cfg", "pyproject.toml"],
+        False,
     )
     if path:
         if "pyproject.toml" in path:
             with open(path, "rb") as file:
-                configuration = tomllib.load(file).get("tool").get("pylsp-mypy")
+                configuration = tomllib.load(file).get("tool", {}).get("pylsp-mypy")
         else:
             with open(path) as file:
                 configuration = ast.literal_eval(file.read())
 
     configSubPaths = configuration.get("config_sub_paths", [])
     mypyConfigFile = findConfigFile(
-        workspace, configSubPaths, ["mypy.ini", ".mypy.ini", "pyproject.toml", "setup.cfg"], True
+        workspace,
+        configSubPaths,
+        ["mypy.ini", ".mypy.ini", "pyproject.toml", "setup.cfg"],
+        True,
     )
     mypyConfigFileMap[workspace] = mypyConfigFile
     settingsCache[workspace] = configuration.copy()
@@ -395,7 +399,7 @@ def init(workspace: str) -> dict[str, str]:
 
 def findConfigFile(
     path: str, configSubPaths: list[str], names: list[str], mypy: bool
-) -> Optional[str]:
+) -> str | None:
     """
     Search for a config file.
 
@@ -594,7 +598,9 @@ def dmypy_stop(settings: dict[str, Any]) -> None:
         # dmypy does not exist on PATH and was not provided by settings,
         # but must exist in the env pylsp-mypy is installed in
         # -> use dmypy via api
-        output, errors, exit_status = mypy_api.run_dmypy(["--status-file", status_file, "stop"])
+        output, errors, exit_status = mypy_api.run_dmypy(
+            ["--status-file", status_file, "stop"]
+        )
         if exit_status != 0:
             log.warning(
                 "failed to stop dmypy; exit code: %d, message: %s",
