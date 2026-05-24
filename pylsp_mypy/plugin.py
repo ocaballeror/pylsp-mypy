@@ -285,7 +285,7 @@ def get_diagnostics(
     )
 
     dmypy_command = ["dmypy", "--status-file", ".pylsp-dmypy", "run"]
-    args = ["--show-error-end", "--no-error-summary", "--no-pretty", "src"]
+    args = ["--show-error-end", "--no-error-summary", "--no-pretty", "src", "tests"]
 
     log.info("dmypy run args = %s via path", args)
     completed_process = subprocess.run(
