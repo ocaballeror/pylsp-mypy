@@ -214,7 +214,7 @@ def test_option_overrides_dmypy(last_diagnostics_monkeypatch, workspace):
         ),
     )
 
-    m = Mock(wraps=lambda a, **_: Mock(returncode=0, **{"stdout": ""}))
+    m = Mock(wraps=lambda a, **_: Mock(returncode=0, **{"stdout": "", "stderr": ""}))
     last_diagnostics_monkeypatch.setattr(plugin.subprocess, "run", m)
 
     document = Document(DOC_URI, workspace, DOC_TYPE_ERR)
@@ -465,7 +465,7 @@ def test_config_overrides_mypy_command(last_diagnostics_monkeypatch, workspace):
         ),
     )
 
-    m = Mock(wraps=lambda a, **_: Mock(returncode=0, **{"stdout": ""}))
+    m = Mock(wraps=lambda a, **_: Mock(returncode=0, **{"stdout": "", "stderr": ""}))
     last_diagnostics_monkeypatch.setattr(plugin.subprocess, "run", m)
 
     document = Document(DOC_URI, workspace, DOC_TYPE_ERR)
@@ -501,7 +501,7 @@ def test_config_overrides_dmypy_command(last_diagnostics_monkeypatch, workspace)
         ),
     )
 
-    m = Mock(wraps=lambda a, **_: Mock(returncode=0, **{"stdout": ""}))
+    m = Mock(wraps=lambda a, **_: Mock(returncode=0, **{"stdout": "", "stderr": ""}))
     last_diagnostics_monkeypatch.setattr(plugin.subprocess, "run", m)
 
     document = Document(DOC_URI, workspace, DOC_TYPE_ERR)
