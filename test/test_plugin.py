@@ -241,7 +241,13 @@ def test_option_overrides_dmypy(last_diagnostics_monkeypatch, workspace):
         "--no-pretty",
         document.path,
     ]
-    m.assert_called_with(expected, capture_output=True, **plugin.windows_flag, encoding="utf-8")
+    m.assert_called_with(
+        expected,
+        capture_output=True,
+        cwd=workspace.root_path,
+        **plugin.windows_flag,
+        encoding="utf-8",
+    )
 
 
 def test_dmypy_status_file(tmpdir, last_diagnostics_monkeypatch, workspace):
