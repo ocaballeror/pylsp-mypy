@@ -15,14 +15,10 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tomllib
 from configparser import ConfigParser
 from pathlib import Path
 from typing import IO, Any, TypedDict
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
 
 from mypy import api as mypy_api
 from pylsp import hookimpl

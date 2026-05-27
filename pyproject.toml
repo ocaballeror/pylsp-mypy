@@ -7,7 +7,7 @@ name = "pylsp-mypy"
 description = "Mypy linter for the Python LSP Server"
 readme = "README.rst"
 license = "MIT"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 authors = [
     { name = "Richard Kellnberger" },
     { name = "Tom van Ommeren" },
@@ -16,6 +16,9 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Topic :: Software Development",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
 dynamic = ["version"]
@@ -56,7 +59,7 @@ version = { attr = "pylsp_mypy._version.__version__" }
 
 [tool.ruff]
 line-length = 100
-target-version = "py314"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [
@@ -78,7 +81,7 @@ live_mode = true
 strict = true
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.11"
 
 [[tool.mypy.overrides]]
 module = "pylsp.*"
