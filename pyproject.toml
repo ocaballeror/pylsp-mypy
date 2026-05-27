@@ -24,7 +24,7 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
     "python-lsp-server >= 1.13.1",
-    "mypy >= 0.981",
+    "mypy >= 1.11",
 ]
 
 [project.urls]
