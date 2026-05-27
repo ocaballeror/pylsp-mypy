@@ -355,6 +355,7 @@ def _run_mypy_and_collect(
             completed_process = subprocess.run(
                 [*mypy_command, *args],
                 capture_output=True,
+                cwd=workspace.root_path,
                 **windows_flag,
                 encoding="utf-8",
             )
@@ -382,6 +383,7 @@ def _run_mypy_and_collect(
             completed_process = subprocess.run(
                 [*dmypy_command, "--status-file", dmypy_status_file, "status"],
                 capture_output=True,
+                cwd=workspace.root_path,
                 **windows_flag,
                 encoding="utf-8",
             )
@@ -396,6 +398,7 @@ def _run_mypy_and_collect(
                 subprocess.run(
                     ["dmypy", "--status-file", dmypy_status_file, "restart"],
                     capture_output=True,
+                    cwd=workspace.root_path,
                     **windows_flag,
                     encoding="utf-8",
                 )
@@ -423,6 +426,7 @@ def _run_mypy_and_collect(
             completed_process = subprocess.run(
                 [*dmypy_command, *args],
                 capture_output=True,
+                cwd=workspace.root_path,
                 **windows_flag,
                 encoding="utf-8",
             )
@@ -679,7 +683,7 @@ def pylsp_code_actions(
     return actions
 
 
-def dmypy_stop(settings: dict[str, Any]) -> None:
+def dmypy_stop(workspace: Workspace, settings: dict[str, Any]) -> None:
     """Possibly stop dmypy."""
     dmypy = settings.get("dmypy", False)
     if not dmypy:
@@ -697,6 +701,7 @@ def dmypy_stop(settings: dict[str, Any]) -> None:
         completed_process = subprocess.run(
             [*dmypy_command, "--status-file", status_file, "stop"],
             capture_output=True,
+            cwd=workspace.root_path,
             **windows_flag,
             encoding="utf-8",
         )
@@ -712,6 +717,7 @@ def dmypy_stop(settings: dict[str, Any]) -> None:
             subprocess.run(
                 [*dmypy_command, "--status-file", status_file, "kill"],
                 capture_output=True,
+                cwd=workspace.root_path,
                 **windows_flag,
                 encoding="utf-8",
                 check=True,
@@ -738,4 +744,4 @@ def dmypy_stop(settings: dict[str, Any]) -> None:
 @hookimpl
 def pylsp_shutdown(config: Config, workspace: Workspace) -> None:
     log.info("shutdown requested")
-    dmypy_stop(config.plugin_settings("pylsp_mypy"))
+    dmypy_stop(workspace, config.plugin_settings("pylsp_mypy"))
