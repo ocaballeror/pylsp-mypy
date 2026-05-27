@@ -79,12 +79,12 @@ def parse_line(line: str, document: Document | None = None) -> dict[str, Any] | 
     ----------
     line : str
         Line of mypy output to be analysed.
-    document : Optional[Document], optional
+    document : Document | None, optional
         Document in wich the line is found. The default is None.
 
     Returns
     -------
-    Optional[Dict[str, Any]]
+    dict[str, Any] | None
         The dict with the lint data.
 
     """
@@ -212,7 +212,7 @@ def pylsp_lint(
 
     Returns
     -------
-    List[Dict[str, Any]]
+    list[dict[str, Any]]
         List of the linting data.
 
     """
@@ -270,7 +270,7 @@ def get_diagnostics(
 
     Returns
     -------
-    List[Dict[str, Any]]
+    list[dict[str, Any]]
         List of the linting data.
 
     """
@@ -471,7 +471,7 @@ def pylsp_settings(config: Config) -> dict[str, dict[str, dict[str, str]]]:
 
     Returns
     -------
-    Dict[str, Dict[str, Dict[str, str]]]
+    dict[str, dict[str, dict[str, Any]]]
         The config dict.
 
     """
@@ -490,7 +490,7 @@ def init(workspace: str) -> dict[str, str]:
 
     Returns
     -------
-    Dict[str, str]
+    dict[str, Any]
         The plugin config dict.
 
     """
@@ -538,16 +538,16 @@ def findConfigFile(
     ----------
     path : str
         The path where the search starts.
-    configSubPaths : List[str]
+    configSubPaths : list[str]
         Additional sub search paths in which mypy configs might be located
-    names : List[str]
+    names : list[str]
         The file to be found (or alternative names).
     mypy : bool
         whether the config file searched is for mypy (plugin otherwise)
 
     Returns
     -------
-    Optional[str]
+    str | None
         The path where the file has been found or None if no matching file has been found.
 
     """
