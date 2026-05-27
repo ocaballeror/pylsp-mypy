@@ -438,7 +438,7 @@ def _run_mypy_and_collect(
 
 
 @hookimpl
-def pylsp_settings(config: Config) -> dict[str, dict[str, dict[str, str]]]:
+def pylsp_settings(config: Config) -> dict[str, dict[str, dict[str, Any]]]:
     """
     Read the settings.
 
@@ -457,7 +457,7 @@ def pylsp_settings(config: Config) -> dict[str, dict[str, dict[str, str]]]:
     return {"plugins": {"pylsp_mypy": configuration}}
 
 
-def init(workspace: str) -> dict[str, str]:
+def init(workspace: str) -> dict[str, Any]:
     """
     Find plugin and mypy config files and creates the temp file should it be used.
 
