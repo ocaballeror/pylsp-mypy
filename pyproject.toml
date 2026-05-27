@@ -1,21 +1,76 @@
-[tool.black]
-line-length = 100
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.git
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | build
-  | dist
-)/
-'''
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.isort]
-profile = "black"
-line_length = 100
+[project]
+name = "pylsp-mypy"
+description = "Mypy linter for the Python LSP Server"
+readme = "README.rst"
+license = "MIT"
+requires-python = ">=3.14"
+authors = [
+    { name = "Richard Kellnberger" },
+    { name = "Tom van Ommeren" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development",
+    "Programming Language :: Python :: 3.14",
+]
+dynamic = ["version"]
+dependencies = [
+    "python-lsp-server >= 1.13.1",
+    "mypy >= 0.981",
+]
+
+[project.urls]
+Homepage = "https://github.com/python-lsp/pylsp-mypy"
+
+[project.entry-points.pylsp]
+pylsp_mypy = "pylsp_mypy.plugin"
+
+[project.optional-dependencies]
+test = [
+    "tox",
+    "pytest",
+    "pytest-cov",
+    "coverage",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit",
+    "pytest",
+    "pytest-cov",
+    "coverage",
+    "ruff",
+    "rstcheck",
+]
+
+[tool.setuptools.packages.find]
+exclude = ["contrib", "docs", "test"]
+
+[tool.setuptools.dynamic]
+version = { attr = "pylsp_mypy._version.__version__" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C90", # mccabe
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 20
 
 [tool.pylsp-mypy]
 enabled = true
