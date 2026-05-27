@@ -564,9 +564,10 @@ def findConfigFile(
         XDG_CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME")
         if XDG_CONFIG_HOME:
             defaultPaths.insert(0, f"{XDG_CONFIG_HOME}/mypy/config")
-        for path in defaultPaths:
-            if Path(path).expanduser().exists():
-                return str(Path(path).expanduser())
+        for default_path in defaultPaths:
+            expanded = Path(default_path).expanduser()
+            if expanded.exists():
+                return str(expanded)
     return None
 
 
