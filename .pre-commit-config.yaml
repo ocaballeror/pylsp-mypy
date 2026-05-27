@@ -7,6 +7,13 @@ repos:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.2
+    hooks:
+      - id: mypy
+        files: ^pylsp_mypy/
+        additional_dependencies:
+          - python-lsp-server
   - repo: https://github.com/Lucas-C/pre-commit-hooks-markup
     rev: v1.0.1
     hooks:
