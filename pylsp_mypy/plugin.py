@@ -177,7 +177,7 @@ def _invoke(
         completed_process = subprocess.run(
             [*command, *args],
             capture_output=True,
-            cwd=workspace.root_path,
+            cwd=workspace.root_path or None,
             **windows_flag,
             encoding="utf-8",
         )
