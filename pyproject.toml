@@ -54,6 +54,9 @@ dev = [
 [tool.setuptools.packages.find]
 exclude = ["contrib", "docs", "test"]
 
+[tool.setuptools.package-data]
+pylsp_mypy = ["py.typed"]
+
 [tool.setuptools.dynamic]
 version = { attr = "pylsp_mypy._version.__version__" }
 
