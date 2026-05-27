@@ -474,7 +474,7 @@ def init(workspace: str) -> dict[str, Any]:
     """
     log.info("init workspace = %s", workspace)
 
-    configuration = {}
+    configuration: dict[str, Any] = {}
     path = findConfigFile(
         workspace,
         [],
@@ -484,7 +484,7 @@ def init(workspace: str) -> dict[str, Any]:
     if path:
         if "pyproject.toml" in path:
             with open(path, "rb") as file:
-                configuration = tomllib.load(file).get("tool").get("pylsp-mypy")
+                configuration = tomllib.load(file).get("tool", {}).get("pylsp-mypy") or {}
         else:
             with open(path) as file:
                 configuration = ast.literal_eval(file.read())
