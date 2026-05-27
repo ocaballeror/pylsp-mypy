@@ -18,7 +18,7 @@ import tempfile
 import tomllib
 from configparser import ConfigParser
 from pathlib import Path
-from typing import IO, Any, TypedDict
+from typing import Any, TypedDict
 
 from mypy import api as mypy_api
 from pylsp import hookimpl
@@ -42,8 +42,6 @@ log = logging.getLogger(__name__)
 mypyConfigFileMap: dict[str, str | None] = {}
 
 settingsCache: dict[str, dict[str, Any]] = {}
-
-tmpFile: IO[bytes] | None = None
 
 # In non-live-mode the file contents aren't updated.
 # Returning an empty diagnostic clears the diagnostic result,
@@ -290,21 +288,15 @@ def get_diagnostics(
         log.warning("live_mode is not supported with dmypy, disabling")
         live_mode = False
 
-    if dmypy:
-        dmypy_status_file = settings.get("dmypy_status_file", ".dmypy.json")
-
     args = ["--show-error-end", "--no-error-summary", "--no-pretty"]
 
-    global tmpFile
+    shadow_file: str | None = None
     if live_mode and not is_saved:
-        if tmpFile:
-            tmpFile = open(tmpFile.name, "wb")
-        else:
-            tmpFile = tempfile.NamedTemporaryFile("wb", delete=False)
-        log.info("live_mode tmpFile = %s", tmpFile.name)
-        tmpFile.write(bytes(document.source, "utf-8"))
-        tmpFile.close()
-        args.extend(["--shadow-file", document.path, tmpFile.name])
+        with tempfile.NamedTemporaryFile("wb", delete=False) as tmp:
+            tmp.write(bytes(document.source, "utf-8"))
+            shadow_file = tmp.name
+        log.info("live_mode shadow_file = %s", shadow_file)
+        args.extend(["--shadow-file", document.path, shadow_file])
     elif not is_saved and document.path in last_diagnostics:
         # On-launch the document isn't marked as saved, so fall through and run
         # the diagnostics anyway even if the file contents may be out of date.
@@ -313,6 +305,23 @@ def get_diagnostics(
             last_diagnostics[document.path],
         )
         return last_diagnostics[document.path]
+
+    try:
+        return _run_mypy_and_collect(args, workspace, document, settings, dmypy)
+    finally:
+        if shadow_file:
+            Path(shadow_file).unlink(missing_ok=True)
+
+
+def _run_mypy_and_collect(
+    args: list[str],
+    workspace: Workspace,
+    document: Document,
+    settings: dict[str, Any],
+    dmypy: bool,
+) -> list[dict[str, Any]]:
+    if dmypy:
+        dmypy_status_file = settings.get("dmypy_status_file", ".dmypy.json")
 
     mypyConfigFile = mypyConfigFileMap.get(workspace.root_path)
     if mypyConfigFile:
@@ -670,19 +679,6 @@ def pylsp_code_actions(
     return actions
 
 
-def close_tmpfile() -> None:
-    """
-    Delete the tmpFile should it exist.
-
-    Returns
-    -------
-    None.
-
-    """
-    if tmpFile and tmpFile.name:
-        os.unlink(tmpFile.name)
-
-
 def dmypy_stop(settings: dict[str, Any]) -> None:
     """Possibly stop dmypy."""
     dmypy = settings.get("dmypy", False)
@@ -742,5 +738,4 @@ def dmypy_stop(settings: dict[str, Any]) -> None:
 @hookimpl
 def pylsp_shutdown(config: Config, workspace: Workspace) -> None:
     log.info("shutdown requested")
-    close_tmpfile()
     dmypy_stop(config.plugin_settings("pylsp_mypy"))
