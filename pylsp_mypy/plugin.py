@@ -419,7 +419,9 @@ def _run_mypy_and_collect(
         )
 
     for line in report.splitlines():
-        if not line.strip():
+        if not line.startswith("{"):
+            # dmypy interleaves daemon status messages ("Daemon started", etc.)
+            # with the JSON diagnostics on stdout.
             continue
         log.debug("parsing: line = %r", line)
         try:
