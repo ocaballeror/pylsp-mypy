@@ -48,7 +48,21 @@ settingsCache: dict[str, dict[str, Any]] = {}
 # so store a cache of last diagnostics for each file a-la the pylint plugin,
 # so we can return some potentially-stale diagnostics.
 # https://github.com/python-lsp/python-lsp-server/blob/v1.0.1/pylsp/plugins/pylint_lint.py#L55-L62
-last_diagnostics: dict[tuple[str, str], list[dict[str, Any]]] = collections.defaultdict(list)
+# pylsp has no document-close hook so the cache is bounded as an LRU to avoid
+# unbounded growth in long sessions.
+MAX_LAST_DIAGNOSTICS = 256
+last_diagnostics: collections.OrderedDict[tuple[str, str], list[dict[str, Any]]] = (
+    collections.OrderedDict()
+)
+
+
+def _cache_last_diagnostics(
+    key: tuple[str, str], diagnostics: list[dict[str, Any]]
+) -> None:
+    last_diagnostics[key] = diagnostics
+    last_diagnostics.move_to_end(key)
+    while len(last_diagnostics) > MAX_LAST_DIAGNOSTICS:
+        last_diagnostics.popitem(last=False)
 
 
 # Windows started opening opening a cmd-like window for every subprocess call
@@ -466,7 +480,7 @@ def _run_mypy_and_collect(
 
     log.info("pylsp-mypy len(diagnostics) = %s", len(diagnostics))
 
-    last_diagnostics[(workspace.root_path, document.path)] = diagnostics
+    _cache_last_diagnostics((workspace.root_path, document.path), diagnostics)
     return diagnostics
 
 
@@ -657,7 +671,7 @@ def pylsp_code_actions(
         return actions
 
     # Code actions based on current selected range
-    for diagnostic in last_diagnostics[(workspace.root_path, document.path)]:
+    for diagnostic in last_diagnostics.get((workspace.root_path, document.path), []):
         lineNumberStart = diagnostic["range"]["start"]["line"]
         lineNumberEnd = diagnostic["range"]["end"]["line"]
         rStart = range["start"]["line"]

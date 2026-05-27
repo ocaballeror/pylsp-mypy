@@ -33,7 +33,7 @@ TEST_LINE_NOTE = (
 @pytest.fixture
 def last_diagnostics_monkeypatch(monkeypatch):
     # gets called before every test altering last_diagnostics in order to reset it
-    monkeypatch.setattr(plugin, "last_diagnostics", collections.defaultdict(list))
+    monkeypatch.setattr(plugin, "last_diagnostics", collections.OrderedDict())
     return monkeypatch
 
 
