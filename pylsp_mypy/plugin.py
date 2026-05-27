@@ -169,6 +169,27 @@ def match_exclude_patterns(document_path: str, exclude_patterns: list[str]) -> b
     return False
 
 
+def _invoke(
+    workspace: Workspace, command: list[str], args: list[str], *, dmypy: bool
+) -> tuple[str, str, int]:
+    """Run mypy/dmypy either via the resolved PATH command or via the mypy API."""
+    if command:
+        completed_process = subprocess.run(
+            [*command, *args],
+            capture_output=True,
+            cwd=workspace.root_path,
+            **windows_flag,
+            encoding="utf-8",
+        )
+        return (
+            completed_process.stdout,
+            completed_process.stderr,
+            completed_process.returncode,
+        )
+    runner = mypy_api.run_dmypy if dmypy else mypy_api.run
+    return runner(args)
+
+
 def get_cmd(settings: dict[str, Any], cmd: str) -> list[str]:
     """
     Get the command to run from settings, falling back to searching the PATH.
@@ -348,27 +369,8 @@ def _run_mypy_and_collect(
         args = apply_overrides(args, overrides)
 
         mypy_command: list[str] = get_cmd(settings, "mypy")
-
-        if mypy_command:
-            # mypy exists on PATH or was provided by settings
-            # -> use this mypy
-            log.info("executing mypy args = %s on path", args)
-            completed_process = subprocess.run(
-                [*mypy_command, *args],
-                capture_output=True,
-                cwd=workspace.root_path,
-                **windows_flag,
-                encoding="utf-8",
-            )
-            report = completed_process.stdout
-            errors = completed_process.stderr
-            exit_status = completed_process.returncode
-        else:
-            # mypy does not exist on PATH and was not provided by settings,
-            # but must exist in the env pylsp-mypy is installed in
-            # -> use mypy via api
-            log.info("executing mypy args = %s via api", args)
-            report, errors, exit_status = mypy_api.run(args)
+        log.info("executing mypy args = %s (path=%s)", args, bool(mypy_command))
+        report, errors, exit_status = _invoke(workspace, mypy_command, args, dmypy=False)
     else:
         # If dmypy daemon is non-responsive calls to run will block.
         # Check daemon status, if non-zero daemon is dead or hung.
@@ -378,68 +380,21 @@ def _run_mypy_and_collect(
 
         dmypy_command: list[str] = get_cmd(settings, "dmypy")
 
-        if dmypy_command:
-            # dmypy exists on PATH or was provided by settings
-            # -> use this dmypy
-            completed_process = subprocess.run(
-                [*dmypy_command, "--status-file", dmypy_status_file, "status"],
-                capture_output=True,
-                cwd=workspace.root_path,
-                **windows_flag,
-                encoding="utf-8",
+        status_args = ["--status-file", dmypy_status_file, "status"]
+        _, errors, exit_status = _invoke(workspace, dmypy_command, status_args, dmypy=True)
+        if exit_status != 0:
+            log.info(
+                "restarting dmypy from status: %s message: %s",
+                exit_status,
+                errors.strip(),
             )
-            errors = completed_process.stderr
-            exit_status = completed_process.returncode
-            if exit_status != 0:
-                log.info(
-                    "restarting dmypy from status: %s message: %s via path",
-                    exit_status,
-                    errors.strip(),
-                )
-                subprocess.run(
-                    ["dmypy", "--status-file", dmypy_status_file, "restart"],
-                    capture_output=True,
-                    cwd=workspace.root_path,
-                    **windows_flag,
-                    encoding="utf-8",
-                )
-        else:
-            # dmypy does not exist on PATH and was not provided by settings,
-            # but must exist in the env pylsp-mypy is installed in
-            # -> use dmypy via api
-            _, errors, exit_status = mypy_api.run_dmypy(
-                ["--status-file", dmypy_status_file, "status"]
-            )
-            if exit_status != 0:
-                log.info(
-                    "restarting dmypy from status: %s message: %s via api",
-                    exit_status,
-                    errors.strip(),
-                )
-                mypy_api.run_dmypy(["--status-file", dmypy_status_file, "restart"])
+            restart_args = ["--status-file", dmypy_status_file, "restart"]
+            _invoke(workspace, dmypy_command, restart_args, dmypy=True)
 
         # run to use existing daemon or restart if required
         args = ["--status-file", dmypy_status_file, "run", "--"] + apply_overrides(args, overrides)
-        if dmypy_command:
-            # dmypy exists on PATH or was provided by settings
-            # -> use this dmypy
-            log.info("dmypy run args = %s via path", args)
-            completed_process = subprocess.run(
-                [*dmypy_command, *args],
-                capture_output=True,
-                cwd=workspace.root_path,
-                **windows_flag,
-                encoding="utf-8",
-            )
-            report = completed_process.stdout
-            errors = completed_process.stderr
-            exit_status = completed_process.returncode
-        else:
-            # dmypy does not exist on PATH and was not provided by settings,
-            # but must exist in the env pylsp-mypy is installed in
-            # -> use dmypy via api
-            log.info("dmypy run args = %s via api", args)
-            report, errors, exit_status = mypy_api.run_dmypy(args)
+        log.info("dmypy run args = %s (path=%s)", args, bool(dmypy_command))
+        report, errors, exit_status = _invoke(workspace, dmypy_command, args, dmypy=True)
 
     log.debug("report:\n%s", report)
     log.debug("errors:\n%s", errors)
@@ -713,50 +668,19 @@ def dmypy_stop(workspace: Workspace, settings: dict[str, Any]) -> None:
 
     dmypy_command: list[str] = get_cmd(settings, "dmypy")
 
-    if dmypy_command:
-        # dmypy exists on PATH or was provided by settings
-        # -> use this dmypy
-        completed_process = subprocess.run(
-            [*dmypy_command, "--status-file", status_file, "stop"],
-            capture_output=True,
-            cwd=workspace.root_path,
-            **windows_flag,
-            encoding="utf-8",
+    output, errors, exit_status = _invoke(
+        workspace, dmypy_command, ["--status-file", status_file, "stop"], dmypy=True
+    )
+    if exit_status != 0:
+        log.warning(
+            "failed to stop dmypy; exit code: %d, message: %s",
+            exit_status,
+            errors.strip(),
         )
-        output, errors = completed_process.stdout, completed_process.stderr
-        exit_status = completed_process.returncode
-        if exit_status != 0:
-            log.warning(
-                "failed to stop dmypy via path; exit code: %d, message: %s",
-                exit_status,
-                errors.strip(),
-            )
-            log.warning("killing dmypy via path")
-            subprocess.run(
-                [*dmypy_command, "--status-file", status_file, "kill"],
-                capture_output=True,
-                cwd=workspace.root_path,
-                **windows_flag,
-                encoding="utf-8",
-                check=True,
-            )
-        else:
-            log.info("dmypy stopped via path: %s", output.strip())
+        log.warning("killing dmypy")
+        _invoke(workspace, dmypy_command, ["--status-file", status_file, "kill"], dmypy=True)
     else:
-        # dmypy does not exist on PATH and was not provided by settings,
-        # but must exist in the env pylsp-mypy is installed in
-        # -> use dmypy via api
-        output, errors, exit_status = mypy_api.run_dmypy(["--status-file", status_file, "stop"])
-        if exit_status != 0:
-            log.warning(
-                "failed to stop dmypy; exit code: %d, message: %s",
-                exit_status,
-                errors.strip(),
-            )
-            log.warning("killing dmypy")
-            mypy_api.run_dmypy(["--status-file", status_file, "kill"])
-        else:
-            log.info("dmypy stopped: %s", output.strip())
+        log.info("dmypy stopped: %s", output.strip())
 
 
 @hookimpl
