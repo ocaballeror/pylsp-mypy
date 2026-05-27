@@ -20,14 +20,10 @@ DOC_TYPE_ERR = """{}.append(3)
 
 # Mypy 1.7 changed <nothing> into "Never", so make this a regex to be compatible
 # with multiple versions of mypy
-TYPE_ERR_MSG_REGEX = (
-    r'"dict\[(?:(?:<nothing>)|(?:Never)), (?:(?:<nothing>)|(?:Never))\]" has no attribute "append"'
-)
+TYPE_ERR_MSG_REGEX = r'"dict\[(?:(?:<nothing>)|(?:Never)), (?:(?:<nothing>)|(?:Never))\]" has no attribute "append"'
 
 TEST_LINE = 'test_plugin.py:279:8:279:16: error: "Request" has no attribute "id"  [attr-defined]'
-TEST_LINE_NOTE = (
-    'test_plugin.py:124:1:129:77: note: Use "-> None" if function does not return a value'
-)
+TEST_LINE_NOTE = 'test_plugin.py:124:1:129:77: note: Use "-> None" if function does not return a value'
 
 
 @pytest.fixture
@@ -87,7 +83,9 @@ def test_handling_of_line_endings(workspace, last_diagnostics_monkeypatch, doc_s
     diags = plugin.pylsp_lint(workspace._config, workspace, doc, is_saved=False)
 
     # assert
-    undefined_name_diags = list(filter(lambda diag: diag["code"] == "name-defined", diags))
+    undefined_name_diags = list(
+        filter(lambda diag: diag["code"] == "name-defined", diags)
+    )
     assert len(undefined_name_diags) == 1
     diag = undefined_name_diags[0]
     assert diag["message"] == 'Name "b" is not defined'
@@ -160,7 +158,9 @@ def test_apply_overrides():
     assert plugin.apply_overrides(["1"], ["a", True, "b"]) == ["a", "1", "b"]
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Not working on Windows due to test design.")
+@pytest.mark.skipif(
+    os.name == "nt", reason="Not working on Windows due to test design."
+)
 def test_option_overrides(tmpdir, last_diagnostics_monkeypatch, workspace):
     import sys
     from stat import S_IRWXU
@@ -246,7 +246,9 @@ def test_option_overrides_dmypy(last_diagnostics_monkeypatch, workspace):
         "--no-pretty",
         document.path,
     ]
-    m.assert_called_with(expected, capture_output=True, **plugin.windows_flag, encoding="utf-8")
+    m.assert_called_with(
+        expected, capture_output=True, **plugin.windows_flag, encoding="utf-8"
+    )
 
 
 def test_dmypy_status_file(tmpdir, last_diagnostics_monkeypatch, workspace):
@@ -298,7 +300,9 @@ def foo():
 
     # Create configuration file for workspace.
     plugin_config = tmpdir.join("pyproject.toml")
-    plugin_config.write(f"[tool.pylsp-mypy]\nenabled = true\nconfig_sub_paths = {config_sub_paths}")
+    plugin_config.write(
+        f"[tool.pylsp-mypy]\nenabled = true\nconfig_sub_paths = {config_sub_paths}"
+    )
     config_dir = tmpdir.mkdir(".config")
     mypy_config = config_dir.join("mypy.ini")
     mypy_config.write("[mypy]\nwarn_unreachable = True\ncheck_untyped_defs = True")
@@ -310,7 +314,9 @@ def foo():
 
     # Update settings for workspace.
     settings = plugin.pylsp_settings(ws._config)
-    ws._config._plugin_settings = _utils.merge_dicts(ws._config._plugin_settings, settings)
+    ws._config._plugin_settings = _utils.merge_dicts(
+        ws._config._plugin_settings, settings
+    )
 
     # Test document to make sure it uses .config/mypy.ini configuration.
     doc = Document(DOC_URI, ws, DOC_SOURCE)
@@ -342,7 +348,9 @@ def foo():
 
     # Update settings for workspace.
     plugin.pylsp_settings(ws._config)
-    ws.update_config({"pylsp": {"plugins": {"pylsp_mypy": {"config_sub_paths": config_sub_paths}}}})
+    ws.update_config(
+        {"pylsp": {"plugins": {"pylsp_mypy": {"config_sub_paths": config_sub_paths}}}}
+    )
 
     # Test document to make sure it uses .config/mypy.ini configuration.
     doc = Document(DOC_URI, ws, DOC_SOURCE)
@@ -376,7 +384,9 @@ def foo():
 def test_match_exclude_patterns(document_path, pattern, os_sep, pattern_matched):
     with patch("os.sep", new=os_sep):
         assert (
-            plugin.match_exclude_patterns(document_path=document_path, exclude_patterns=[pattern])
+            plugin.match_exclude_patterns(
+                document_path=document_path, exclude_patterns=[pattern]
+            )
             is pattern_matched
         )
 
@@ -392,7 +402,9 @@ def test_config_exclude(tmpdir, workspace):
 
     # Add the path of our document to the exclude patterns
     exclude_path = doc.path.replace(os.sep, "/")
-    workspace.update_config({"pylsp": {"plugins": {"pylsp_mypy": {"exclude": [exclude_path]}}}})
+    workspace.update_config(
+        {"pylsp": {"plugins": {"pylsp_mypy": {"exclude": [exclude_path]}}}}
+    )
     diags = plugin.pylsp_lint(workspace._config, workspace, doc, is_saved=False)
     assert diags == []
 
@@ -402,26 +414,54 @@ def test_config_exclude(tmpdir, workspace):
     [
         ("mypy", {}, ["/bin/mypy"], True, ["mypy"]),
         ("mypy", {}, None, True, []),
-        ("mypy", {"mypy_command": ["/path/to/mypy"]}, "/bin/mypy", True, ["/path/to/mypy"]),
+        (
+            "mypy",
+            {"mypy_command": ["/path/to/mypy"]},
+            "/bin/mypy",
+            True,
+            ["/path/to/mypy"],
+        ),
         ("mypy", {"mypy_command": ["/path/to/mypy"]}, None, True, ["/path/to/mypy"]),
         ("dmypy", {}, "/bin/dmypy", True, ["dmypy"]),
         ("dmypy", {}, None, True, []),
-        ("dmypy", {"dmypy_command": ["/path/to/dmypy"]}, "/bin/dmypy", True, ["/path/to/dmypy"]),
-        ("dmypy", {"dmypy_command": ["/path/to/dmypy"]}, None, True, ["/path/to/dmypy"]),
+        (
+            "dmypy",
+            {"dmypy_command": ["/path/to/dmypy"]},
+            "/bin/dmypy",
+            True,
+            ["/path/to/dmypy"],
+        ),
+        (
+            "dmypy",
+            {"dmypy_command": ["/path/to/dmypy"]},
+            None,
+            True,
+            ["/path/to/dmypy"],
+        ),
         ("mypy", {}, ["/bin/mypy"], False, ["mypy"]),
         ("mypy", {}, None, False, []),
         ("mypy", {"mypy_command": ["/path/to/mypy"]}, "/bin/mypy", False, ["mypy"]),
         ("mypy", {"mypy_command": ["/path/to/mypy"]}, None, False, []),
         ("dmypy", {}, "/bin/dmypy", False, ["dmypy"]),
         ("dmypy", {}, None, False, []),
-        ("dmypy", {"dmypy_command": ["/path/to/dmypy"]}, "/bin/dmypy", False, ["dmypy"]),
+        (
+            "dmypy",
+            {"dmypy_command": ["/path/to/dmypy"]},
+            "/bin/dmypy",
+            False,
+            ["dmypy"],
+        ),
         ("dmypy", {"dmypy_command": ["/path/to/dmypy"]}, None, False, []),
     ],
 )
-def test_get_cmd(command, settings, cmd_on_path, environmentVariableSet: bool, expected):
+def test_get_cmd(
+    command, settings, cmd_on_path, environmentVariableSet: bool, expected
+):
     with patch("shutil.which", return_value=cmd_on_path):
         if environmentVariableSet:
-            os.environ["PYLSP_MYPY_ALLOW_DANGEROUS_CODE_EXECUTION"] = "Does not matter at all"
+            os.environ["PYLSP_MYPY_ALLOW_DANGEROUS_CODE_EXECUTION"] = (
+                "Does not matter at all"
+            )
         else:
             os.environ.pop("PYLSP_MYPY_ALLOW_DANGEROUS_CODE_EXECUTION", None)
         assert plugin.get_cmd(settings, command) == expected
