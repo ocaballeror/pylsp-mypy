@@ -94,7 +94,7 @@ def parse_diagnostic(
     file_path = data["file"]
     if file_path != "<string>" and document and document.path:
         if not document.path.endswith(file_path):
-            log.warning("discarding result for %s against %s", file_path, document.path)
+            log.debug("discarding result for %s against %s", file_path, document.path)
             return None
 
     lineno = max(int(data["line"]) - 1, 0)
@@ -350,7 +350,13 @@ def _run_mypy_and_collect(
         args.append("--config-file")
         args.append(mypyConfigFile)
 
-    args.append(document.path)
+    target = _resolve_lint_target(workspace, document)
+    if settings.get("skip_tests", True) and target == workspace.root_path:
+        for name in ("tests", "test"):
+            test_dir = os.path.join(workspace.root_path, name)
+            if os.path.isdir(test_dir) and not document.path.startswith(test_dir + os.sep):
+                args.extend(["--exclude", re.escape(test_dir) + re.escape(os.sep)])
+    args.append(target)
 
     if settings.get("strict", False):
         args.append("--strict")
@@ -649,6 +655,17 @@ def pylsp_code_actions(
             actions.append(action)
 
     return actions
+
+
+def _resolve_lint_target(workspace: Workspace, document: Document) -> str:
+    """Lint the workspace root when the document lives inside it, else the document alone."""
+    if (
+        workspace.root_path
+        and document.path
+        and document.path.startswith(workspace.root_path + os.sep)
+    ):
+        return workspace.root_path
+    return document.path
 
 
 def resolve_dmypy_status_file(workspace: Workspace, settings: dict[str, Any]) -> str:
