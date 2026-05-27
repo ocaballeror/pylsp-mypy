@@ -50,8 +50,10 @@ TEST_DIAG_ERROR_WITH_HINT = {
 
 @pytest.fixture
 def last_diagnostics_monkeypatch(monkeypatch):
-    # gets called before every test altering last_diagnostics in order to reset it
+    # reset the module-level caches between tests so they don't pollute each other
     monkeypatch.setattr(plugin, "last_diagnostics", collections.OrderedDict())
+    monkeypatch.setattr(plugin, "mypyConfigFileMap", {})
+    monkeypatch.setattr(plugin, "settingsCache", {})
     return monkeypatch
 
 
