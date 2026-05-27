@@ -321,7 +321,7 @@ def _run_mypy_and_collect(
     dmypy: bool,
 ) -> list[dict[str, Any]]:
     if dmypy:
-        dmypy_status_file = settings.get("dmypy_status_file", ".dmypy.json")
+        dmypy_status_file = resolve_dmypy_status_file(workspace, settings)
 
     mypyConfigFile = mypyConfigFileMap.get(workspace.root_path)
     if mypyConfigFile:
@@ -683,13 +683,21 @@ def pylsp_code_actions(
     return actions
 
 
+def resolve_dmypy_status_file(workspace: Workspace, settings: dict[str, Any]) -> str:
+    """Return the dmypy status file path, anchored to the workspace if relative."""
+    status_file = settings.get("dmypy_status_file", ".dmypy.json")
+    if not os.path.isabs(status_file):
+        status_file = os.path.join(workspace.root_path, status_file)
+    return status_file
+
+
 def dmypy_stop(workspace: Workspace, settings: dict[str, Any]) -> None:
     """Possibly stop dmypy."""
     dmypy = settings.get("dmypy", False)
     if not dmypy:
         return
 
-    status_file = settings.get("dmypy_status_file", ".dmypy.json")
+    status_file = resolve_dmypy_status_file(workspace, settings)
     if not os.path.exists(status_file):
         return
 

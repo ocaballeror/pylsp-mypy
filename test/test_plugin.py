@@ -231,7 +231,7 @@ def test_option_overrides_dmypy(last_diagnostics_monkeypatch, workspace):
     expected = [
         "dmypy",
         "--status-file",
-        ".dmypy.json",
+        os.path.join(workspace.root_path, ".dmypy.json"),
         "run",
         "--",
         "--python-executable",
