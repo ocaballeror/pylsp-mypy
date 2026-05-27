@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 File that contains the python-lsp-server plugin pylsp-mypy.
 
@@ -18,7 +17,7 @@ import subprocess
 import tempfile
 from configparser import ConfigParser
 from pathlib import Path
-from typing import IO, Any, Optional, TypedDict
+from typing import IO, Any, TypedDict
 
 try:
     import tomllib
@@ -31,27 +30,24 @@ from pylsp.config.config import Config
 from pylsp.workspace import Document, Workspace
 
 line_pattern = re.compile(
-    (
-        r"^(?P<file>.+):(?P<start_line>\d+):(?P<start_col>\d*):(?P<end_line>\d*):(?P<end_col>\d*): "
-        r"(?P<severity>\w+): (?P<message>.+?)(?: +\[(?P<code>.+)\])?$"
-    )
+    r"^(?P<file>.+):(?P<start_line>\d+):(?P<start_col>\d*):(?P<end_line>\d*):(?P<end_col>\d*): "
+    r"(?P<severity>\w+): (?P<message>.+?)(?: +\[(?P<code>.+)\])?$"
 )
 
 whole_line_pattern = re.compile(  # certain mypy warnings do not report start-end ranges
-    (
-        r"^(?P<file>.+):(?P<start_line>\d+): "
-        r"(?P<severity>\w+): (?P<message>.+?)(?: +\[(?P<code>.+)\])?$"
-    )
+    r"^(?P<file>.+):(?P<start_line>\d+): "
+    r"(?P<severity>\w+): (?P<message>.+?)(?: +\[(?P<code>.+)\])?$"
 )
 
 log = logging.getLogger(__name__)
+# log.setLevel(logging.DEBUG)
 
 # A mapping from workspace path to config file path
-mypyConfigFileMap: dict[str, Optional[str]] = {}
+mypyConfigFileMap: dict[str, str | None] = {}
 
 settingsCache: dict[str, dict[str, Any]] = {}
 
-tmpFile: Optional[IO[bytes]] = None
+tmpFile: IO[bytes] | None = None
 
 # In non-live-mode the file contents aren't updated.
 # Returning an empty diagnostic clears the diagnostic result,
@@ -76,9 +72,7 @@ windows_flag: WindowsFlag = (
 )
 
 
-def parse_line(
-    line: str, document: Optional[Document] = None
-) -> Optional[dict[str, Any]]:
+def parse_line(line: str, document: Document | None = None) -> dict[str, Any] | None:
     """
     Return a language-server diagnostic from a line of the Mypy error report.
 
@@ -247,12 +241,9 @@ def pylsp_lint(
     # exclude = ["tests/*"]
     exclude_patterns = settings.get("exclude", [])
 
-    if match_exclude_patterns(
-        document_path=document.path, exclude_patterns=exclude_patterns
-    ):
+    if match_exclude_patterns(document_path=document.path, exclude_patterns=exclude_patterns):
         log.debug(
-            f"Not running because {document.path} matches "
-            f"exclude patterns '{exclude_patterns}'"
+            f"Not running because {document.path} matches exclude patterns '{exclude_patterns}'"
         )
         return []
 
@@ -419,9 +410,7 @@ def get_diagnostics(
                 mypy_api.run_dmypy(["--status-file", dmypy_status_file, "restart"])
 
         # run to use existing daemon or restart if required
-        args = ["--status-file", dmypy_status_file, "run", "--"] + apply_overrides(
-            args, overrides
-        )
+        args = ["--status-file", dmypy_status_file, "run", "--"] + apply_overrides(args, overrides)
         if dmypy_command:
             # dmypy exists on PATH or was provided by settings
             # -> use this dmypy
@@ -458,9 +447,7 @@ def get_diagnostics(
                     "end": {"line": 0, "character": 1000},
                 },
                 "message": errors,
-                "severity": 1
-                if exit_status != 0
-                else 2,  # Error if exited with error or warning.
+                "severity": 1 if exit_status != 0 else 2,  # Error if exited with error or warning.
             }
         )
 
@@ -544,7 +531,7 @@ def init(workspace: str) -> dict[str, str]:
 
 def findConfigFile(
     path: str, configSubPaths: list[str], names: list[str], mypy: bool
-) -> Optional[str]:
+) -> str | None:
     """
     Search for a config file.
 
@@ -743,9 +730,7 @@ def dmypy_stop(settings: dict[str, Any]) -> None:
         # dmypy does not exist on PATH and was not provided by settings,
         # but must exist in the env pylsp-mypy is installed in
         # -> use dmypy via api
-        output, errors, exit_status = mypy_api.run_dmypy(
-            ["--status-file", status_file, "stop"]
-        )
+        output, errors, exit_status = mypy_api.run_dmypy(["--status-file", status_file, "stop"])
         if exit_status != 0:
             log.warning(
                 "failed to stop dmypy; exit code: %d, message: %s",
