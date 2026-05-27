@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 authors = [
     { name = "Richard Kellnberger" },
     { name = "Tom van Ommeren" },
+    { name = "Oscar Caballero" },
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
