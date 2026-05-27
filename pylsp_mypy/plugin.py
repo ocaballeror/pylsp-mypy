@@ -8,6 +8,7 @@ Created on Fri Jul 10 09:53:57 2020
 
 import ast
 import collections
+import json
 import logging
 import os
 import os.path
@@ -24,16 +25,6 @@ from mypy import api as mypy_api
 from pylsp import hookimpl
 from pylsp.config.config import Config
 from pylsp.workspace import Document, Workspace
-
-line_pattern = re.compile(
-    r"^(?P<file>.+):(?P<start_line>\d+):(?P<start_col>\d*):(?P<end_line>\d*):(?P<end_col>\d*): "
-    r"(?P<severity>\w+): (?P<message>.+?)(?: +\[(?P<code>.+)\])?$"
-)
-
-whole_line_pattern = re.compile(  # certain mypy warnings do not report start-end ranges
-    r"^(?P<file>.+):(?P<start_line>\d+): "
-    r"(?P<severity>\w+): (?P<message>.+?)(?: +\[(?P<code>.+)\])?$"
-)
 
 log = logging.getLogger(__name__)
 # log.setLevel(logging.DEBUG)
@@ -56,9 +47,7 @@ last_diagnostics: collections.OrderedDict[tuple[str, str], list[dict[str, Any]]]
 )
 
 
-def _cache_last_diagnostics(
-    key: tuple[str, str], diagnostics: list[dict[str, Any]]
-) -> None:
+def _cache_last_diagnostics(key: tuple[str, str], diagnostics: list[dict[str, Any]]) -> None:
     last_diagnostics[key] = diagnostics
     last_diagnostics.move_to_end(key)
     while len(last_diagnostics) > MAX_LAST_DIAGNOSTICS:
@@ -80,61 +69,61 @@ windows_flag: WindowsFlag = (
 )
 
 
-def parse_line(line: str, document: Document | None = None) -> dict[str, Any] | None:
+_SEVERITY_MAP = {"error": 1, "warning": 2, "note": 3}
+
+
+def parse_diagnostic(
+    data: dict[str, Any], document: Document | None = None
+) -> dict[str, Any] | None:
     """
-    Return a language-server diagnostic from a line of the Mypy error report.
-
-    optionally, use the whole document to provide more context on it.
-
+    Return a language-server diagnostic from one JSON object emitted by mypy.
 
     Parameters
     ----------
-    line : str
-        Line of mypy output to be analysed.
+    data : dict[str, Any]
+        One mypy diagnostic decoded from ``mypy --output json`` (one object per line).
     document : Document | None, optional
-        Document in wich the line is found. The default is None.
+        Document the diagnostic should belong to. Used to discard cross-file results.
 
     Returns
     -------
     dict[str, Any] | None
-        The dict with the lint data.
+        The dict with the lint data, or None if the result belongs to a different file.
 
     """
-    result = line_pattern.match(line) or whole_line_pattern.match(line)
-
-    if not result:
-        return None
-
-    file_path = result["file"]
-    if file_path != "<string>":  # live mode
-        # results from other files can be included, but we cannot return
-        # them.
-        if document and document.path and not document.path.endswith(file_path):
+    file_path = data["file"]
+    if file_path != "<string>" and document and document.path:
+        if not document.path.endswith(file_path):
             log.warning("discarding result for %s against %s", file_path, document.path)
             return None
 
-    lineno = int(result["start_line"]) - 1  # 0-based line number
-    offset = int(result.groupdict().get("start_col", 1)) - 1  # 0-based offset
-    end_lineno = int(result.groupdict().get("end_line", lineno + 1)) - 1
-    end_offset = int(result.groupdict().get("end_col", 1))  # end is exclusive
+    lineno = max(int(data["line"]) - 1, 0)
+    offset = max(int(data["column"]), 0)
+    end_lineno = max(int(data.get("end_line", data["line"])) - 1, 0)
+    end_offset = max(int(data.get("end_column", offset + 1)), 0)
 
-    severity = result["severity"]
-    if severity not in ("error", "note"):
-        log.warning(f"invalid error severity '{severity}'")
-    errno = 1 if severity == "error" else 3
+    severity = data["severity"]
+    if severity not in _SEVERITY_MAP:
+        log.warning("invalid error severity '%s'", severity)
+    errno = _SEVERITY_MAP.get(severity, 3)
 
-    diag = {
+    message = data["message"]
+    hint = data.get("hint")
+    if hint:
+        message = f"{message}\n{hint}"
+
+    diag: dict[str, Any] = {
         "source": "mypy",
         "range": {
             "start": {"line": lineno, "character": offset},
             "end": {"line": end_lineno, "character": end_offset},
         },
-        "message": result["message"],
+        "message": message,
         "severity": errno,
     }
 
-    if result["code"]:
-        diag["code"] = result["code"]
+    if data.get("code"):
+        diag["code"] = data["code"]
 
     return diag
 
@@ -302,7 +291,7 @@ def get_diagnostics(
         log.warning("live_mode is not supported with dmypy, disabling")
         live_mode = False
 
-    args = ["--show-error-end", "--no-error-summary", "--no-pretty"]
+    args = ["--output=json", "--no-error-summary"]
 
     shadow_file: str | None = None
     if live_mode and not is_saved:
@@ -475,8 +464,15 @@ def _run_mypy_and_collect(
         )
 
     for line in report.splitlines():
+        if not line.strip():
+            continue
         log.debug("parsing: line = %r", line)
-        diag = parse_line(line, document)
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            log.warning("could not parse mypy output line: %r", line)
+            continue
+        diag = parse_diagnostic(data, document)
         if diag:
             diagnostics.append(diag)
 

@@ -24,10 +24,28 @@ TYPE_ERR_MSG_REGEX = (
     r'"dict\[(?:(?:<nothing>)|(?:Never)), (?:(?:<nothing>)|(?:Never))\]" has no attribute "append"'
 )
 
-TEST_LINE = 'test_plugin.py:279:8:279:16: error: "Request" has no attribute "id"  [attr-defined]'
-TEST_LINE_NOTE = (
-    'test_plugin.py:124:1:129:77: note: Use "-> None" if function does not return a value'
-)
+TEST_DIAG_ERROR = {
+    "file": "test_plugin.py",
+    "line": 279,
+    "column": 8,
+    "end_line": 279,
+    "end_column": 16,
+    "message": '"Request" has no attribute "id"',
+    "hint": None,
+    "code": "attr-defined",
+    "severity": "error",
+}
+TEST_DIAG_ERROR_WITH_HINT = {
+    "file": "test_plugin.py",
+    "line": 124,
+    "column": 1,
+    "end_line": 129,
+    "end_column": 77,
+    "message": "Function is missing a return type annotation",
+    "hint": 'Use "-> None" if function does not return a value',
+    "code": "no-untyped-def",
+    "severity": "error",
+}
 
 
 @pytest.fixture
@@ -91,22 +109,25 @@ def test_handling_of_line_endings(workspace, last_diagnostics_monkeypatch, doc_s
     assert diag["range"]["end"] == {"line": 1, "character": 1}
 
 
-def test_parse_full_line(workspace):
-    diag = plugin.parse_line(TEST_LINE)  # TODO parse a document here
+def test_parse_diagnostic_error(workspace):
+    diag = plugin.parse_diagnostic(TEST_DIAG_ERROR)
     assert diag["message"] == '"Request" has no attribute "id"'
-    assert diag["range"]["start"] == {"line": 278, "character": 7}
+    assert diag["range"]["start"] == {"line": 278, "character": 8}
     assert diag["range"]["end"] == {"line": 278, "character": 16}
     assert diag["severity"] == 1
     assert diag["code"] == "attr-defined"
 
 
-def test_parse_note_line(workspace):
-    diag = plugin.parse_line(TEST_LINE_NOTE)
-    assert diag["message"] == 'Use "-> None" if function does not return a value'
-    assert diag["range"]["start"] == {"line": 123, "character": 0}
+def test_parse_diagnostic_error_with_hint(workspace):
+    diag = plugin.parse_diagnostic(TEST_DIAG_ERROR_WITH_HINT)
+    assert diag["message"] == (
+        "Function is missing a return type annotation\n"
+        'Use "-> None" if function does not return a value'
+    )
+    assert diag["range"]["start"] == {"line": 123, "character": 1}
     assert diag["range"]["end"] == {"line": 128, "character": 77}
-    assert diag["severity"] == 3
-    assert "code" not in diag
+    assert diag["severity"] == 1
+    assert diag["code"] == "no-untyped-def"
 
 
 def test_multiple_workspaces(tmpdir, last_diagnostics_monkeypatch):
@@ -236,9 +257,8 @@ def test_option_overrides_dmypy(last_diagnostics_monkeypatch, workspace):
         "--",
         "--python-executable",
         "/tmp/fake",
-        "--show-error-end",
+        "--output=json",
         "--no-error-summary",
-        "--no-pretty",
         document.path,
     ]
     m.assert_called_with(
