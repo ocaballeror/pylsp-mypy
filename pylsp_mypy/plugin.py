@@ -459,6 +459,8 @@ def _run_mypy_and_collect(
 
     # Expose generic mypy error on the first line.
     if errors:
+        log.warning("mypy stderr:\n%s", errors)
+        first_line = errors.splitlines()[0] if errors.strip() else errors
         diagnostics.append(
             {
                 "source": "mypy",
@@ -467,7 +469,7 @@ def _run_mypy_and_collect(
                     # Client is supposed to clip end column to line length.
                     "end": {"line": 0, "character": 1000},
                 },
-                "message": errors,
+                "message": first_line,
                 "severity": 1 if exit_status != 0 else 2,  # Error if exited with error or warning.
             }
         )
