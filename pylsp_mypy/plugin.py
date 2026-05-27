@@ -48,7 +48,7 @@ settingsCache: dict[str, dict[str, Any]] = {}
 # so store a cache of last diagnostics for each file a-la the pylint plugin,
 # so we can return some potentially-stale diagnostics.
 # https://github.com/python-lsp/python-lsp-server/blob/v1.0.1/pylsp/plugins/pylint_lint.py#L55-L62
-last_diagnostics: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
+last_diagnostics: dict[tuple[str, str], list[dict[str, Any]]] = collections.defaultdict(list)
 
 
 # Windows started opening opening a cmd-like window for every subprocess call
@@ -297,14 +297,12 @@ def get_diagnostics(
             shadow_file = tmp.name
         log.info("live_mode shadow_file = %s", shadow_file)
         args.extend(["--shadow-file", document.path, shadow_file])
-    elif not is_saved and document.path in last_diagnostics:
+    elif not is_saved and (workspace.root_path, document.path) in last_diagnostics:
         # On-launch the document isn't marked as saved, so fall through and run
         # the diagnostics anyway even if the file contents may be out of date.
-        log.info(
-            "non-live, returning cached diagnostics len(cached) = %s",
-            last_diagnostics[document.path],
-        )
-        return last_diagnostics[document.path]
+        cached = last_diagnostics[(workspace.root_path, document.path)]
+        log.info("non-live, returning cached diagnostics len(cached) = %s", cached)
+        return cached
 
     try:
         return _run_mypy_and_collect(args, workspace, document, settings, dmypy)
@@ -468,7 +466,7 @@ def _run_mypy_and_collect(
 
     log.info("pylsp-mypy len(diagnostics) = %s", len(diagnostics))
 
-    last_diagnostics[document.path] = diagnostics
+    last_diagnostics[(workspace.root_path, document.path)] = diagnostics
     return diagnostics
 
 
@@ -659,7 +657,7 @@ def pylsp_code_actions(
         return actions
 
     # Code actions based on current selected range
-    for diagnostic in last_diagnostics[document.path]:
+    for diagnostic in last_diagnostics[(workspace.root_path, document.path)]:
         lineNumberStart = diagnostic["range"]["start"]["line"]
         lineNumberEnd = diagnostic["range"]["end"]["line"]
         rStart = range["start"]["line"]
