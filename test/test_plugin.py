@@ -272,6 +272,36 @@ def test_option_overrides_dmypy(last_diagnostics_monkeypatch, workspace):
     )
 
 
+def test_dmypy_restarts_on_daemon_crash(last_diagnostics_monkeypatch, workspace):
+    last_diagnostics_monkeypatch.setattr(
+        FakeConfig,
+        "plugin_settings",
+        lambda _, p: ({"dmypy": True, "live_mode": False} if p == "pylsp_mypy" else {}),
+    )
+
+    responses = [
+        Mock(returncode=0, stdout="", stderr=""),  # status
+        Mock(returncode=2, stdout="Daemon crashed!\n", stderr=""),  # first run, crashed
+        Mock(returncode=0, stdout="", stderr=""),  # restart
+        Mock(returncode=0, stdout="", stderr=""),  # retry run
+    ]
+    m = Mock(side_effect=responses)
+    last_diagnostics_monkeypatch.setattr(plugin.subprocess, "run", m)
+
+    config = FakeConfig(uris.to_fs_path(workspace.root_uri))
+    plugin.pylsp_settings(config)
+    plugin.pylsp_lint(
+        config=config,
+        workspace=workspace,
+        document=Document(DOC_URI, workspace, DOC_TYPE_ERR),
+        is_saved=False,
+    )
+
+    assert m.call_count == 4
+    assert "restart" in m.call_args_list[2].args[0]
+    assert "run" in m.call_args_list[3].args[0]
+
+
 def test_lints_top_level_dir_relative_to_workspace(
     tmpdir, last_diagnostics_monkeypatch, workspace
 ):

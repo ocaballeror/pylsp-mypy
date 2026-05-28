@@ -402,6 +402,14 @@ def _run_mypy_and_collect(
         log.info("dmypy run args = %s (path=%s)", args, bool(dmypy_command))
         report, errors, exit_status = _invoke(dmypy_command, args, dmypy=True, cwd=project_root)
 
+        if _daemon_crashed(report, errors):
+            log.info("dmypy daemon crashed; restarting and retrying")
+            restart_args = ["--status-file", dmypy_status_file, "restart"]
+            _invoke(dmypy_command, restart_args, dmypy=True, cwd=project_root)
+            report, errors, exit_status = _invoke(
+                dmypy_command, args, dmypy=True, cwd=project_root
+            )
+
     log.debug("report:\n%s", report)
     log.debug("errors:\n%s", errors)
 
@@ -655,6 +663,11 @@ def pylsp_code_actions(
             actions.append(action)
 
     return actions
+
+
+def _daemon_crashed(report: str, errors: str) -> bool:
+    """Detect dmypy's crash banner in either stream."""
+    return "Daemon crashed!" in report or "Daemon crashed!" in errors
 
 
 def _find_project_root(path: str) -> str | None:
