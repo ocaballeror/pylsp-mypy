@@ -272,17 +272,18 @@ def test_option_overrides_dmypy(last_diagnostics_monkeypatch, workspace):
     )
 
 
-def test_lints_workspace_root_when_document_inside(
+def test_lints_top_level_dir_relative_to_workspace(
     tmpdir, last_diagnostics_monkeypatch, workspace
 ):
-    doc_path = tmpdir.mkdir("src").join("foo.py")
+    src_dir = tmpdir.mkdir("src")
+    doc_path = src_dir.mkdir("pkg").join("foo.py")
     doc_path.write(DOC_TYPE_ERR)
     doc_uri = uris.from_fs_path(str(doc_path))
 
     last_diagnostics_monkeypatch.setattr(
         FakeConfig,
         "plugin_settings",
-        lambda _, p: ({"live_mode": False, "skip_tests": False} if p == "pylsp_mypy" else {}),
+        lambda _, p: ({"live_mode": False} if p == "pylsp_mypy" else {}),
     )
 
     m = Mock(wraps=lambda a, **_: Mock(returncode=0, **{"stdout": "", "stderr": ""}))
@@ -295,16 +296,45 @@ def test_lints_workspace_root_when_document_inside(
     plugin.pylsp_lint(config=config, workspace=workspace, document=document, is_saved=True)
 
     called_args = m.call_args.args[0]
-    assert workspace.root_path in called_args
+    assert "src" in called_args
+    assert str(src_dir) not in called_args
     assert str(doc_path) not in called_args
-    assert "--exclude" not in called_args
+    assert m.call_args.kwargs["cwd"] == workspace.root_path
 
 
-def test_skip_tests_excludes_top_level_tests_dir(
-    tmpdir, last_diagnostics_monkeypatch, workspace
-):
-    tests_dir = tmpdir.mkdir("tests")
-    doc_path = tmpdir.mkdir("src").join("foo.py")
+def test_lints_top_level_dir_when_workspace_empty(tmpdir, last_diagnostics_monkeypatch):
+    tmpdir.join("pyproject.toml").write("")
+    src_dir = tmpdir.mkdir("src")
+    doc_path = src_dir.mkdir("pkg").join("foo.py")
+    doc_path.write(DOC_TYPE_ERR)
+    doc_uri = uris.from_fs_path(str(doc_path))
+
+    ws = Workspace("", Mock())  # empty workspace root, as some clients send
+    ws._config = Config(uris.from_fs_path(str(tmpdir)), {}, 0, {})
+
+    last_diagnostics_monkeypatch.setattr(
+        FakeConfig,
+        "plugin_settings",
+        lambda _, p: ({"live_mode": False} if p == "pylsp_mypy" else {}),
+    )
+
+    m = Mock(wraps=lambda a, **_: Mock(returncode=0, **{"stdout": "", "stderr": ""}))
+    last_diagnostics_monkeypatch.setattr(plugin.subprocess, "run", m)
+
+    document = Document(doc_uri, ws, DOC_TYPE_ERR)
+    config = FakeConfig("")
+    plugin.pylsp_settings(config)
+
+    plugin.pylsp_lint(config=config, workspace=ws, document=document, is_saved=True)
+
+    called_args = m.call_args.args[0]
+    assert "src" in called_args
+    assert str(src_dir) not in called_args
+    assert m.call_args.kwargs["cwd"] == str(Path(str(tmpdir)).resolve())
+
+
+def test_lints_document_when_at_project_root(tmpdir, last_diagnostics_monkeypatch, workspace):
+    doc_path = tmpdir.join("foo.py")
     doc_path.write(DOC_TYPE_ERR)
     doc_uri = uris.from_fs_path(str(doc_path))
 
@@ -324,36 +354,8 @@ def test_skip_tests_excludes_top_level_tests_dir(
     plugin.pylsp_lint(config=config, workspace=workspace, document=document, is_saved=True)
 
     called_args = m.call_args.args[0]
-    assert "--exclude" in called_args
-    exclude_pattern = called_args[called_args.index("--exclude") + 1]
-    assert re.search(exclude_pattern, str(tests_dir) + os.sep + "test_foo.py")
-
-
-def test_skip_tests_keeps_dir_when_document_inside(
-    tmpdir, last_diagnostics_monkeypatch, workspace
-):
-    tests_dir = tmpdir.mkdir("tests")
-    doc_path = tests_dir.join("test_foo.py")
-    doc_path.write(DOC_TYPE_ERR)
-    doc_uri = uris.from_fs_path(str(doc_path))
-
-    last_diagnostics_monkeypatch.setattr(
-        FakeConfig,
-        "plugin_settings",
-        lambda _, p: ({"live_mode": False} if p == "pylsp_mypy" else {}),
-    )
-
-    m = Mock(wraps=lambda a, **_: Mock(returncode=0, **{"stdout": "", "stderr": ""}))
-    last_diagnostics_monkeypatch.setattr(plugin.subprocess, "run", m)
-
-    document = Document(doc_uri, workspace, DOC_TYPE_ERR)
-    config = FakeConfig(uris.to_fs_path(workspace.root_uri))
-    plugin.pylsp_settings(config)
-
-    plugin.pylsp_lint(config=config, workspace=workspace, document=document, is_saved=True)
-
-    called_args = m.call_args.args[0]
-    assert "--exclude" not in called_args
+    assert "foo.py" in called_args
+    assert str(doc_path) not in called_args
 
 
 def test_dmypy_status_file(tmpdir, last_diagnostics_monkeypatch, workspace):

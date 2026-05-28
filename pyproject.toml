@@ -26,6 +26,7 @@ dynamic = ["version"]
 dependencies = [
     "python-lsp-server >= 1.13.1",
     "mypy >= 1.11",
+    "pyprojroot>=0.3.0",
 ]
 
 [project.urls]

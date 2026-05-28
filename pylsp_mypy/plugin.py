@@ -25,6 +25,8 @@ from mypy import api as mypy_api
 from pylsp import hookimpl
 from pylsp.config.config import Config
 from pylsp.workspace import Document, Workspace
+from pyprojroot import find_root
+from pyprojroot.here import CRITERIA as _PROJECT_ROOT_CRITERIA
 
 log = logging.getLogger(__name__)
 # log.setLevel(logging.DEBUG)
@@ -170,14 +172,14 @@ def match_exclude_patterns(document_path: str, exclude_patterns: list[str]) -> b
 
 
 def _invoke(
-    workspace: Workspace, command: list[str], args: list[str], *, dmypy: bool
+    command: list[str], args: list[str], *, dmypy: bool, cwd: str | None
 ) -> tuple[str, str, int]:
     """Run mypy/dmypy either via the resolved PATH command or via the mypy API."""
     if command:
         completed_process = subprocess.run(
             [*command, *args],
             capture_output=True,
-            cwd=workspace.root_path or None,
+            cwd=cwd or None,
             **windows_flag,
             encoding="utf-8",
         )
@@ -342,6 +344,8 @@ def _run_mypy_and_collect(
     settings: dict[str, Any],
     dmypy: bool,
 ) -> list[dict[str, Any]]:
+    project_root = _resolve_project_root(workspace, document)
+
     if dmypy:
         dmypy_status_file = resolve_dmypy_status_file(workspace, settings)
 
@@ -350,13 +354,7 @@ def _run_mypy_and_collect(
         args.append("--config-file")
         args.append(mypyConfigFile)
 
-    target = _resolve_lint_target(workspace, document)
-    if settings.get("skip_tests", True) and target == workspace.root_path:
-        for name in ("tests", "test"):
-            test_dir = os.path.join(workspace.root_path, name)
-            if os.path.isdir(test_dir) and not document.path.startswith(test_dir + os.sep):
-                args.extend(["--exclude", re.escape(test_dir) + re.escape(os.sep)])
-    args.append(target)
+    args.append(_resolve_lint_target(project_root, document))
 
     if settings.get("strict", False):
         args.append("--strict")
@@ -376,7 +374,7 @@ def _run_mypy_and_collect(
 
         mypy_command: list[str] = get_cmd(settings, "mypy")
         log.info("executing mypy args = %s (path=%s)", args, bool(mypy_command))
-        report, errors, exit_status = _invoke(workspace, mypy_command, args, dmypy=False)
+        report, errors, exit_status = _invoke(mypy_command, args, dmypy=False, cwd=project_root)
     else:
         # If dmypy daemon is non-responsive calls to run will block.
         # Check daemon status, if non-zero daemon is dead or hung.
@@ -387,7 +385,9 @@ def _run_mypy_and_collect(
         dmypy_command: list[str] = get_cmd(settings, "dmypy")
 
         status_args = ["--status-file", dmypy_status_file, "status"]
-        _, errors, exit_status = _invoke(workspace, dmypy_command, status_args, dmypy=True)
+        _, errors, exit_status = _invoke(
+            dmypy_command, status_args, dmypy=True, cwd=project_root
+        )
         if exit_status != 0:
             log.info(
                 "restarting dmypy from status: %s message: %s",
@@ -395,12 +395,12 @@ def _run_mypy_and_collect(
                 errors.strip(),
             )
             restart_args = ["--status-file", dmypy_status_file, "restart"]
-            _invoke(workspace, dmypy_command, restart_args, dmypy=True)
+            _invoke(dmypy_command, restart_args, dmypy=True, cwd=project_root)
 
         # run to use existing daemon or restart if required
         args = ["--status-file", dmypy_status_file, "run", "--"] + apply_overrides(args, overrides)
         log.info("dmypy run args = %s (path=%s)", args, bool(dmypy_command))
-        report, errors, exit_status = _invoke(workspace, dmypy_command, args, dmypy=True)
+        report, errors, exit_status = _invoke(dmypy_command, args, dmypy=True, cwd=project_root)
 
     log.debug("report:\n%s", report)
     log.debug("errors:\n%s", errors)
@@ -657,15 +657,35 @@ def pylsp_code_actions(
     return actions
 
 
-def _resolve_lint_target(workspace: Workspace, document: Document) -> str:
-    """Lint the workspace root when the document lives inside it, else the document alone."""
-    if (
-        workspace.root_path
-        and document.path
-        and document.path.startswith(workspace.root_path + os.sep)
-    ):
+def _find_project_root(path: str) -> str | None:
+    """Walk up from a file path to the nearest project root, per pyprojroot's defaults."""
+    try:
+        return str(find_root(_PROJECT_ROOT_CRITERIA, start=Path(path).resolve()))
+    except RuntimeError:
+        return None
+
+
+def _resolve_project_root(workspace: Workspace, document: Document) -> str | None:
+    """Workspace root if the client set one, else autodetect from the document."""
+    if workspace.root_path:
         return workspace.root_path
-    return document.path
+    if document.path:
+        return _find_project_root(document.path)
+    return None
+
+
+def _resolve_lint_target(root: str | None, document: Document) -> str:
+    """Top-level project subdirectory containing the document, relative to root.
+
+    Falls back to the absolute document path when there's no project root or the
+    document lives outside it. dmypy is finicky with absolute paths, so when the
+    document is inside the root we return a path relative to it (which the caller
+    runs with ``cwd=root``).
+    """
+    if not root or not document.path or not document.path.startswith(root + os.sep):
+        return document.path
+    relative = Path(document.path).relative_to(root)
+    return relative.parts[0]
 
 
 def resolve_dmypy_status_file(workspace: Workspace, settings: dict[str, Any]) -> str:
@@ -689,7 +709,10 @@ def dmypy_stop(workspace: Workspace, settings: dict[str, Any]) -> None:
     dmypy_command: list[str] = get_cmd(settings, "dmypy")
 
     output, errors, exit_status = _invoke(
-        workspace, dmypy_command, ["--status-file", status_file, "stop"], dmypy=True
+        dmypy_command,
+        ["--status-file", status_file, "stop"],
+        dmypy=True,
+        cwd=workspace.root_path or None,
     )
     if exit_status != 0:
         log.warning(
@@ -698,7 +721,12 @@ def dmypy_stop(workspace: Workspace, settings: dict[str, Any]) -> None:
             errors.strip(),
         )
         log.warning("killing dmypy")
-        _invoke(workspace, dmypy_command, ["--status-file", status_file, "kill"], dmypy=True)
+        _invoke(
+            dmypy_command,
+            ["--status-file", status_file, "kill"],
+            dmypy=True,
+            cwd=workspace.root_path or None,
+        )
     else:
         log.info("dmypy stopped: %s", output.strip())
 
