@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import tomllib
 from configparser import ConfigParser
 from pathlib import Path
@@ -402,6 +403,15 @@ def _run_mypy_and_collect(
         log.info("dmypy run args = %s (path=%s)", args, bool(dmypy_command))
         report, errors, exit_status = _invoke(dmypy_command, args, dmypy=True, cwd=project_root)
 
+        if _daemon_unreachable(report, errors):
+            # Likely a mid-restart race from a prior crash recovery. Wait briefly
+            # for the daemon to bind its socket, then try once more.
+            log.info("dmypy daemon unreachable; retrying after brief wait")
+            time.sleep(0.5)
+            report, errors, exit_status = _invoke(
+                dmypy_command, args, dmypy=True, cwd=project_root
+            )
+
         if _daemon_crashed(report, errors):
             log.info("dmypy daemon crashed; restarting and retrying")
             restart_args = ["--status-file", dmypy_status_file, "restart"]
@@ -668,6 +678,11 @@ def pylsp_code_actions(
 def _daemon_crashed(report: str, errors: str) -> bool:
     """Detect dmypy's crash banner in either stream."""
     return "Daemon crashed!" in report or "Daemon crashed!" in errors
+
+
+def _daemon_unreachable(report: str, errors: str) -> bool:
+    """Detect a dmypy client that couldn't reach the daemon socket."""
+    return "Connection refused" in report or "Connection refused" in errors
 
 
 def _find_project_root(path: str) -> str | None:
